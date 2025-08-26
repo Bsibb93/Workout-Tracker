@@ -73,3 +73,28 @@ hr { border: none; border-top:1px solid #232a37; margin: 12px 0; }
 .right { text-align: right; }
 .center { text-align:center; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
+/* Easier-to-read weight input */
+.input.big-number {
+  font-size: 28px;
+  font-weight: 800;
+  text-align: center;
+  padding: 16px 14px;
+  letter-spacing: 0.3px;
+}
+/* Improve input focus visibility */
+.input:focus, select:focus {
+  outline: 2px solid rgba(59,130,246,0.8);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+  border-color: #385ea8;
+}
+/* Remove spinners for number inputs on iOS/Chrome */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+.stepper { display:flex; gap:8px; }
+.stepper .button { padding: 10px 12px; }

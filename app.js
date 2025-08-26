@@ -149,6 +149,17 @@ function exportCSV() {
 
 function changeUnit(u) { state.unit = u; save(); }
 
+function weightStepValue(){ return state.unit === 'lb' ? 5 : 2.5; }
+function nudgeWeight(delta){
+  let w = parseFloat(draft.weight);
+  if (isNaN(w)) w = 0;
+  w = w + delta;
+  // Keep one decimal for kg; integers fine for lb
+  draft.weight = state.unit === 'kg' ? Number(w.toFixed(1)) : Math.round(w);
+  render();
+}
+
+
 function render() {
   const root = $('#app'); root.innerHTML = '';
 
@@ -217,12 +228,7 @@ function render() {
           ) : ''}
         </div>
         <div class="row" style="gap:10px; align-items:flex-end;">
-          <div style="flex:1">
-            <div class="label">Weight (${state.unit})</div>
-            <input class="input" type="number" inputmode="decimal" placeholder="e.g. 135" value="${draft.weight}" oninput="draft.weight=this.value">
-          </div>
-          <div style="width:110px">
-            <div class="label">Reps</div>
+          <div style="flex:1"><div class="label">Weight (${state.unit})</div><input class="input big-number" type="number" inputmode="decimal" placeholder="e.g. 135" value="${draft.weight}" oninput="draft.weight=this.value"><div class="stepper mt8"><button class="button" onclick="nudgeWeight(-weightStepValue())">- ${weightStepValue()}</button><button class="button" onclick="nudgeWeight(weightStepValue())">+ ${weightStepValue()}</button></div></div><div style="width:110px"><div class="label">Reps</div>
             <input class="input" type="number" inputmode="numeric" placeholder="e.g. 5" value="${draft.reps}" oninput="draft.reps=this.value">
           </div>
           <button class="button good" style="width:140px" onclick="addSetToDraft()">Save set</button>
