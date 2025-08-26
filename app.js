@@ -1,5 +1,5 @@
 
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v8';
 
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
@@ -216,15 +216,12 @@ function render() {
             ? `<div class="hint">Last: ${formatUnit(last.weight)} × ${last.reps} • ${last.date || 'previous session'}</div>`
             : `<div class="hint">No history yet for this movement.</div>`
           ) : ''}
-          <!-- Reps stepper moved into the left column -->
-          <div class="stepper mt8">
-            <button class="button" onclick="nudgeReps(-repStepValue())">- 5</button>
-            <button class="button" onclick="nudgeReps(repStepValue())">+ 5</button>
-          </div>
+          <!-- Save set moved into the left column -->
+          <button class="button good mt12" style="width:100%;" onclick="addSetToDraft()">Save set</button>
         </div>
 
-        <!-- RIGHT COLUMN (stacked: weight, reps, then Save) -->
-        <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
+        <!-- RIGHT COLUMN: Weight and Reps, each with their own steppers underneath -->
+        <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
           <div>
             <div class="label">Weight (${state.unit})</div>
             <input class="input big-number" type="number" inputmode="decimal" placeholder="e.g. 135"
@@ -238,8 +235,11 @@ function render() {
             <div class="label">Reps</div>
             <input class="input big-number" type="number" inputmode="numeric" placeholder="e.g. 5"
                    value="${draft.reps}" oninput="draft.reps=this.value">
+            <div class="stepper mt8">
+              <button class="button" onclick="nudgeReps(-repStepValue())">- 5</button>
+              <button class="button" onclick="nudgeReps(repStepValue())">+ 5</button>
+            </div>
           </div>
-          <button class="button good" style="width:100%;" onclick="addSetToDraft()">Save set</button>
         </div>
       </div>
 
@@ -260,6 +260,11 @@ function render() {
             </tbody>
           </table>
         ` : `<div class="empty">No sets added yet.</div>`}
+      </div>
+
+      <div class="row mt16">
+        <button class="button primary" onclick="saveWorkout()">Save workout</button>
+        <button class="button ghost" onclick="draft=initDraft(); render()">Reset</button>
       </div>
     `;
     root.appendChild(panel);
@@ -358,14 +363,6 @@ function render() {
 window.addEventListener('load', () => {
   render();
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js').then(reg => {
-      // Try to update and activate immediately
-      if (reg.waiting) { reg.waiting.postMessage({type:'SKIP_WAITING'}); }
-      if (reg.installing) {
-        reg.installing.addEventListener('statechange', () => {
-          if (reg.waiting) { reg.waiting.postMessage({type:'SKIP_WAITING'}); }
-        });
-      }
-    }).catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
   }
 });

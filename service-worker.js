@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pocket-lifts-v6';
+const CACHE_NAME = 'pocket-lifts-v8';
 const ASSETS = [
   './',
   './index.html',
