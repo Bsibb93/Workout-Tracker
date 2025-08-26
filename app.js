@@ -1,5 +1,5 @@
 
-const APP_VERSION = 'v8';
+const APP_VERSION = 'v9';
 
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
@@ -22,6 +22,9 @@ const defaultState = {
 let state = load();
 let currentTab = 'workout';
 let draft = initDraft();
+
+// For WhatsApp import UI
+let importPreview = []; // [{name, checked}]
 
 function save() {
   localStorage.setItem(storeKey, JSON.stringify(state));
@@ -65,14 +68,22 @@ function suggestWeight(movementId) {
 }
 
 function addMovement(name, bodypart='') {
-  name = name.trim();
+  name = (name||'').trim();
   if (!name) return;
-  if (state.movements.some(m => m.name.toLowerCase() === name.toLowerCase())) {
-    alert('Movement already exists.');
-    return;
-  }
+  if (state.movements.some(m => m.name.toLowerCase() === name.toLowerCase())) return;
   state.movements.push({ id: uid(), name, bodypart });
-  save();
+}
+
+function addMovementsBulk(names) {
+  let count = 0;
+  names.forEach(n => {
+    const name = (n||'').trim();
+    if (!name) return;
+    if (state.movements.some(m => m.name.toLowerCase() === name.toLowerCase())) return;
+    state.movements.push({ id: uid(), name });
+    count++;
+  });
+  if (count) save(); else render();
 }
 
 function deleteMovement(id) {
@@ -160,6 +171,101 @@ function exportCSV() {
 
 function changeUnit(u) { state.unit = u; save(); }
 
+// ---- WhatsApp Import ----
+function normalizeLine(line) {
+  // Drop WhatsApp timestamp/name prefixes if present.
+  // Remove bracketed prefix like [12/08/2025, 9:10 PM] or [2025-08-12, 21:10]
+  line = line.replace(/^\[[^\]]+\]\s*/, '');
+  // Remove leading date/time - name: prefix like "12/08/2025, 9:10 PM - John: "
+  line = line.replace(/^\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{2,4},?\s+\d{1,2}:\d{2}(?:\s?[APap]\.?[Mm]\.?)?\s*-\s*[^:]+:\s*/, '');
+  // Also try ISO date: "2025-08-12 21:10 - Name: "
+  line = line.replace(/^\d{4}-\d{2}-\d{2}[, ]+\d{1,2}:\d{2}(?:\s?[APap]\.?[Mm]\.?)?\s*-\s*[^:]+:\s*/, '');
+  return line.trim();
+}
+
+const KNOWN_LIFTS = [
+  'Back Squat','Front Squat','Bench Press','Incline Bench','Decline Bench','Overhead Press','Shoulder Press',
+  'Deadlift','Sumo Deadlift','Romanian Deadlift','Barbell Row','Pendlay Row','Dumbbell Row',
+  'Lat Pulldown','Pull Up','Chin Up','Dip','Push Up',
+  'Leg Press','Leg Extension','Leg Curl','Calf Raise',
+  'Bicep Curl','EZ Bar Curl','Hammer Curl','Triceps Pushdown','Skull Crusher',
+  'Hip Thrust','Glute Bridge','Lunge','Split Squat','Bulgarian Split Squat',
+  'Cable Fly','Chest Fly','Pec Deck','Seated Row','Face Pull'
+];
+
+function extractMovementsFromText(text) {
+  const candidates = new Set();
+
+  const lines = text.split(/\r?\n/);
+  for (let raw of lines) {
+    let line = normalizeLine(raw);
+    if (!line) continue;
+
+    // Explicit tag format: "mv: Movement Name"
+    const tagMatch = line.match(/^\s*(?:mv|movement)\s*:\s*(.+)$/i);
+    if (tagMatch) {
+      candidates.add(tagMatch[1].trim());
+      continue;
+    }
+
+    // Pattern: "<movement> 225x5" or "<movement> 100 kg x 8" or "<movement> 3x5 @ 135"
+    const m1 = line.match(/^\s*([A-Za-z][A-Za-z /&\-]{2,}?)\s+\d{1,4}(?:\.\d+)?\s*(?:kg|lb)?\s*(?:x|×|@)\s*\d+/i);
+    if (m1) {
+      candidates.add(m1[1].trim().replace(/\s{2,}/g,' '));
+      continue;
+    }
+
+    // Pattern: "225x5 <movement>" or "100 kg x 8 <movement>"
+    const m2 = line.match(/^\s*\d{1,4}(?:\.\d+)?\s*(?:kg|lb)?\s*(?:x|×|@)\s*\d+\s+([A-Za-z][A-Za-z /&\-]{2,})/i);
+    if (m2) {
+      candidates.add(m2[1].trim().replace(/\s{2,}/g,' '));
+      continue;
+    }
+
+    // Look for any known lift mentioned verbatim
+    for (const lift of KNOWN_LIFTS) {
+      const rx = new RegExp(`\\b${lift.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')}\\b`, 'i');
+      if (rx.test(line)) {
+        candidates.add(lift);
+      }
+    }
+  }
+
+  // Dedup by case-insensitive compare
+  const list = Array.from(candidates).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+  return list;
+}
+
+function handleWhatsappFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = reader.result;
+    const names = extractMovementsFromText(text);
+    importPreview = names.map(n => ({ name: n, checked: true }));
+    render(); // show preview list
+  };
+  reader.readAsText(file);
+}
+
+function toggleImportItem(idx, prop, value) {
+  importPreview[idx][prop] = value;
+  render();
+}
+
+function applyImportSelection() {
+  const selected = importPreview.filter(i => i.checked).map(i => i.name);
+  addMovementsBulk(selected);
+  importPreview = [];
+  alert(`Added ${selected.length} movements.`);
+}
+
+function clearImportPreview() {
+  importPreview = [];
+  render();
+}
+
+// ---- UI ----
+
 function render() {
   const root = $('#app'); root.innerHTML = '';
 
@@ -216,11 +322,11 @@ function render() {
             ? `<div class="hint">Last: ${formatUnit(last.weight)} × ${last.reps} • ${last.date || 'previous session'}</div>`
             : `<div class="hint">No history yet for this movement.</div>`
           ) : ''}
-          <!-- Save set moved into the left column -->
+          <!-- Save set -->
           <button class="button good mt12" style="width:100%;" onclick="addSetToDraft()">Save set</button>
         </div>
 
-        <!-- RIGHT COLUMN: Weight and Reps, each with their own steppers underneath -->
+        <!-- RIGHT COLUMN: Weight and Reps with steppers underneath -->
         <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
           <div>
             <div class="label">Weight (${state.unit})</div>
@@ -281,9 +387,35 @@ function render() {
         <button class="button good" style="width:160px" onclick="(function(){
           const n = document.getElementById('mvName').value;
           const p = document.getElementById('mvPart').value;
-          addMovement(n, p); document.getElementById('mvName').value=''; document.getElementById('mvPart').value='';
+          addMovement(n, p); document.getElementById('mvName').value=''; document.getElementById('mvPart').value=''; save();
         })()">Add movement</button>
       </div>
+
+      <div class="mt12 importBox">
+        <div class="row space-between">
+          <div>
+            <div class="bold">Import from WhatsApp (.txt)</div>
+            <div class="note">Use WhatsApp → Group chat → Export chat → <b>Without Media</b>. Then pick the <code>.txt</code> file here.</div>
+          </div>
+          <input type="file" accept=".txt" onchange="if(this.files && this.files[0]) handleWhatsappFile(this.files[0])">
+        </div>
+
+        ${importPreview.length ? `
+          <div class="importList">
+            ${importPreview.map((it, idx) => `
+              <div class="importItem">
+                <input type="checkbox" ${it.checked ? 'checked' : ''} onchange="toggleImportItem(${idx}, 'checked', this.checked)">
+                <input class="input" type="text" value="${it.name.replace(/\"/g,'&quot;')}" oninput="toggleImportItem(${idx}, 'name', this.value)">
+              </div>
+            `).join('')}
+          </div>
+          <div class="row mt12">
+            <button class="button primary" onclick="applyImportSelection()">Add selected</button>
+            <button class="button ghost" onclick="clearImportPreview()">Clear</button>
+          </div>
+        ` : ''}
+      </div>
+
       <div class="list mt12">
         ${state.movements.length ? state.movements.map(m => `
           <div class="card row space-between">
@@ -295,7 +427,7 @@ function render() {
               <button class="button danger" onclick="deleteMovement('${m.id}')">Delete</button>
             </div>
           </div>
-        `).join('') : `<div class="empty">No movements yet. Add your first one above.</div>`}
+        `).join('') : `<div class="empty">No movements yet. Add or import some above.</div>`}
       </div>
     `;
     root.appendChild(panel);
