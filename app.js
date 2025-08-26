@@ -1,5 +1,5 @@
 
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v9-wave';
 
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
@@ -23,7 +23,7 @@ let state = load();
 let currentTab = 'workout';
 let draft = initDraft();
 
-// For WhatsApp import UI
+// WhatsApp import preview data
 let importPreview = []; // [{name, checked}]
 
 function save() {
@@ -72,6 +72,7 @@ function addMovement(name, bodypart='') {
   if (!name) return;
   if (state.movements.some(m => m.name.toLowerCase() === name.toLowerCase())) return;
   state.movements.push({ id: uid(), name, bodypart });
+  save();
 }
 
 function addMovementsBulk(names) {
@@ -130,6 +131,37 @@ function addSetToDraft() {
   }, 0);
 }
 
+// --- Wave (6–4–2) generator (schema-safe) ---
+function suggestWaveWeights(base){
+  let m = parseFloat(base);
+  if (isNaN(m) || m <= 0) m = 100;
+  let easy = Math.round(m * 0.9);
+  let heavy = Math.round(m * 1.1);
+  if (state.unit === 'kg') { easy = Number((m * 0.9).toFixed(1)); heavy = Number((m * 1.1).toFixed(1)); }
+  return {easy, moderate: m, heavy};
+}
+
+function addWave(times){
+  if (!draft.movementId) { alert('Pick a movement first.'); return; }
+  const seq = times === 2 ? [6,4,2,6,4,2] : [6,4,2];
+  const base = draft.weight || suggestWeight(draft.movementId) || 100;
+  const sug = suggestWaveWeights(base);
+  const wEasy = parseFloat((document.getElementById('w_easy')||{}).value) || sug.easy;
+  const wMod  = parseFloat((document.getElementById('w_moderate')||{}).value) || sug.moderate;
+  const wHeavy= parseFloat((document.getElementById('w_heavy')||{}).value) || sug.heavy;
+  const mv = state.movements.find(m => m.id === draft.movementId);
+  const weights = [wEasy, wMod, wHeavy];
+  seq.forEach((r, i) => {
+    const w = weights[i % 3];
+    draft.sets.push({ id: uid(), movementId: mv.id, movementName: mv.name, weight: w, reps: r });
+  });
+  render();
+  setTimeout(() => {
+    const rows = document.querySelectorAll('tbody tr');
+    if (rows.length) rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 0);
+}
+
 function saveWorkout() {
   if (!draft.sets.length) { alert('Add at least one set.'); return; }
   state.workouts.push({ id: uid(), date: draft.date, notes: draft.notes.trim(), sets: structuredClone(draft.sets) });
@@ -173,12 +205,8 @@ function changeUnit(u) { state.unit = u; save(); }
 
 // ---- WhatsApp Import ----
 function normalizeLine(line) {
-  // Drop WhatsApp timestamp/name prefixes if present.
-  // Remove bracketed prefix like [12/08/2025, 9:10 PM] or [2025-08-12, 21:10]
   line = line.replace(/^\[[^\]]+\]\s*/, '');
-  // Remove leading date/time - name: prefix like "12/08/2025, 9:10 PM - John: "
   line = line.replace(/^\d{1,4}[\/\-.]\d{1,2}[\/\-.]\d{2,4},?\s+\d{1,2}:\d{2}(?:\s?[APap]\.?[Mm]\.?)?\s*-\s*[^:]+:\s*/, '');
-  // Also try ISO date: "2025-08-12 21:10 - Name: "
   line = line.replace(/^\d{4}-\d{2}-\d{2}[, ]+\d{1,2}:\d{2}(?:\s?[APap]\.?[Mm]\.?)?\s*-\s*[^:]+:\s*/, '');
   return line.trim();
 }
@@ -195,45 +223,26 @@ const KNOWN_LIFTS = [
 
 function extractMovementsFromText(text) {
   const candidates = new Set();
-
   const lines = text.split(/\r?\n/);
   for (let raw of lines) {
     let line = normalizeLine(raw);
     if (!line) continue;
 
-    // Explicit tag format: "mv: Movement Name"
     const tagMatch = line.match(/^\s*(?:mv|movement)\s*:\s*(.+)$/i);
-    if (tagMatch) {
-      candidates.add(tagMatch[1].trim());
-      continue;
-    }
+    if (tagMatch) { candidates.add(tagMatch[1].trim()); continue; }
 
-    // Pattern: "<movement> 225x5" or "<movement> 100 kg x 8" or "<movement> 3x5 @ 135"
-    const m1 = line.match(/^\s*([A-Za-z][A-Za-z /&\-]{2,}?)\s+\d{1,4}(?:\.\d+)?\s*(?:kg|lb)?\s*(?:x|×|@)\s*\d+/i);
-    if (m1) {
-      candidates.add(m1[1].trim().replace(/\s{2,}/g,' '));
-      continue;
-    }
+    const m1 = line.match(/^\s*([A-Za-z][A-Za-z /&\\-]{2,}?)\\s+\\d{1,4}(?:\\.\\d+)?\\s*(?:kg|lb)?\\s*(?:x|×|@)\\s*\\d+/i);
+    if (m1) { candidates.add(m1[1].trim().replace(/\\s{2,}/g,' ')); continue; }
 
-    // Pattern: "225x5 <movement>" or "100 kg x 8 <movement>"
-    const m2 = line.match(/^\s*\d{1,4}(?:\.\d+)?\s*(?:kg|lb)?\s*(?:x|×|@)\s*\d+\s+([A-Za-z][A-Za-z /&\-]{2,})/i);
-    if (m2) {
-      candidates.add(m2[1].trim().replace(/\s{2,}/g,' '));
-      continue;
-    }
+    const m2 = line.match(/^\\s*\\d{1,4}(?:\\.\\d+)?\\s*(?:kg|lb)?\\s*(?:x|×|@)\\s*\\d+\\s+([A-Za-z][A-Za-z /&\\-]{2,})/i);
+    if (m2) { candidates.add(m2[1].trim().replace(/\\s{2,}/g,' ')); continue; }
 
-    // Look for any known lift mentioned verbatim
     for (const lift of KNOWN_LIFTS) {
-      const rx = new RegExp(`\\b${lift.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')}\\b`, 'i');
-      if (rx.test(line)) {
-        candidates.add(lift);
-      }
+      const rx = new RegExp(`\\\\b${lift.replace(/[-/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&')}\\\\b`, 'i');
+      if (rx.test(line)) candidates.add(lift);
     }
   }
-
-  // Dedup by case-insensitive compare
-  const list = Array.from(candidates).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
-  return list;
+  return Array.from(candidates).sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
 }
 
 function handleWhatsappFile(file) {
@@ -242,7 +251,7 @@ function handleWhatsappFile(file) {
     const text = reader.result;
     const names = extractMovementsFromText(text);
     importPreview = names.map(n => ({ name: n, checked: true }));
-    render(); // show preview list
+    render();
   };
   reader.readAsText(file);
 }
@@ -322,16 +331,39 @@ function render() {
             ? `<div class="hint">Last: ${formatUnit(last.weight)} × ${last.reps} • ${last.date || 'previous session'}</div>`
             : `<div class="hint">No history yet for this movement.</div>`
           ) : ''}
-          <!-- Save set -->
+
           <button class="button good mt12" style="width:100%;" onclick="addSetToDraft()">Save set</button>
+
+          <div class="waveBox">
+            <div class="bold">Wave (6–4–2)</div>
+            <div class="note">Enter Easy / Moderate / Heavy weights or leave blank to auto-suggest (±10% around Moderate).</div>
+            <div class="grid mt8">
+              <div>
+                <div class="label">Easy weight (${state.unit})</div>
+                <input id="w_easy" class="input" type="number" inputmode="decimal" placeholder="e.g. 120">
+              </div>
+              <div>
+                <div class="label">Moderate weight (${state.unit})</div>
+                <input id="w_moderate" class="input" type="number" inputmode="decimal" placeholder="e.g. 135" value="${draft.weight||''}">
+              </div>
+              <div>
+                <div class="label">Heavy weight (${state.unit})</div>
+                <input id="w_heavy" class="input" type="number" inputmode="decimal" placeholder="e.g. 150">
+              </div>
+            </div>
+            <div class="row mt12">
+              <button class="button" onclick="addWave(1)">Add 6–4–2</button>
+              <button class="button" onclick="addWave(2)">Add 6–4–2–6–4–2</button>
+            </div>
+          </div>
         </div>
 
-        <!-- RIGHT COLUMN: Weight and Reps with steppers underneath -->
+        <!-- RIGHT COLUMN: Weight and Reps, each with stepper underneath -->
         <div style="display:flex; flex-direction:column; gap:12px; width:100%;">
           <div>
             <div class="label">Weight (${state.unit})</div>
             <input class="input big-number" type="number" inputmode="decimal" placeholder="e.g. 135"
-                   value="${draft.weight}" oninput="draft.weight=this.value">
+                   value="${draft.weight||''}" oninput="draft.weight=this.value">
             <div class="stepper mt8">
               <button class="button" onclick="nudgeWeight(-weightStepValue())">- ${weightStepValue()}</button>
               <button class="button" onclick="nudgeWeight(weightStepValue())">+ ${weightStepValue()}</button>
@@ -387,7 +419,7 @@ function render() {
         <button class="button good" style="width:160px" onclick="(function(){
           const n = document.getElementById('mvName').value;
           const p = document.getElementById('mvPart').value;
-          addMovement(n, p); document.getElementById('mvName').value=''; document.getElementById('mvPart').value=''; save();
+          addMovement(n, p); document.getElementById('mvName').value=''; document.getElementById('mvPart').value='';
         })()">Add movement</button>
       </div>
 
