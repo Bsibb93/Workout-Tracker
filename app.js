@@ -1,8 +1,6 @@
-/* Pocket Lifts — simple offline workout tracker (v3)
- * Changes:
- * - "Save set" immediately updates list and auto-scrolls
- * - Compact "Last" line under movement selector
- */
+
+const APP_VERSION = 'v6';
+
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -87,6 +85,24 @@ function deleteMovement(id) {
   }
 }
 
+function weightStepValue(){ return state.unit === 'lb' ? 5 : 2.5; }
+function repStepValue(){ return 5; }
+function nudgeWeight(delta){
+  let w = parseFloat(draft.weight);
+  if (isNaN(w)) w = 0;
+  w = w + delta;
+  draft.weight = state.unit === 'kg' ? Number(w.toFixed(1)) : Math.round(w);
+  render();
+}
+function nudgeReps(delta){
+  let r = parseInt(draft.reps, 10);
+  if (isNaN(r)) r = 0;
+  r = r + delta;
+  if (r < 0) r = 0;
+  draft.reps = r;
+  render();
+}
+
 function addSetToDraft() {
   if (!draft.movementId) { alert('Add a movement first.'); return; }
   const mv = state.movements.find(m => m.id === draft.movementId);
@@ -95,12 +111,8 @@ function addSetToDraft() {
   if (!mv || isNaN(weight) || isNaN(reps) || reps <= 0) { alert('Please enter a valid weight and reps.'); return; }
 
   draft.sets.push({ id: uid(), movementId: mv.id, movementName: mv.name, weight, reps });
-  // Keep same weight by default
   draft.weight = weight;
-
-  // Re-render immediately so the new set shows
   render();
-  // Scroll to the last row for feedback
   setTimeout(() => {
     const rows = document.querySelectorAll('tbody tr');
     if (rows.length) rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -132,15 +144,14 @@ function formatUnit(n) {
 }
 
 function switchTab(tab) { currentTab = tab; render(); }
-
 function deleteWorkout(id) { if (!confirm('Delete this workout?')) return; state.workouts = state.workouts.filter(w => w.id !== id); save(); }
 
 function exportCSV() {
   const rows = [['date','movement','weight','reps','unit','notes']];
   for (const w of state.workouts) {
-    for (const s of w.sets) rows.push([w.date, s.movementName, s.weight, s.reps, state.unit, w.notes.replace(/\\n/g,' ')]);
+    for (const s of w.sets) rows.push([w.date, s.movementName, s.weight, s.reps, state.unit, w.notes.replace(/\n/g,' ')]);
   }
-  const csv = rows.map(r => r.map(x => `\"${String(x).replace(/\"/g,'\"\"')}\"`).join(',')).join('\\n');
+  const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -148,27 +159,6 @@ function exportCSV() {
 }
 
 function changeUnit(u) { state.unit = u; save(); }
-
-function weightStepValue(){ return state.unit === 'lb' ? 5 : 2.5; }
-function repStepValue(){ return 5; }
-function nudgeReps(delta){
-  let r = parseInt(draft.reps, 10);
-  if (isNaN(r)) r = 0;
-  r = r + delta;
-  if (r < 0) r = 0;
-  draft.reps = r;
-  render();
-}
-
-function nudgeWeight(delta){
-  let w = parseFloat(draft.weight);
-  if (isNaN(w)) w = 0;
-  w = w + delta;
-  // Keep one decimal for kg; integers fine for lb
-  draft.weight = state.unit === 'kg' ? Number(w.toFixed(1)) : Math.round(w);
-  render();
-}
-
 
 function render() {
   const root = $('#app'); root.innerHTML = '';
@@ -216,17 +206,7 @@ function render() {
     panel.innerHTML = `
       <h2>New Workout</h2>
       <div class="grid two mt8">
-        <div>
-          <div class="label">Date</div>
-          <input class="input" type="date" value="${draft.date}" onchange="draft.date=this.value">
-        </div>
-        <div>
-          <div class="label">Notes</div>
-          <input class="input" type="text" placeholder="Optional notes…" value="${draft.notes}" oninput="draft.notes=this.value">
-        </div>
-      </div>
-      <div class="divider"></div>
-      <div class="grid two">
+        <!-- LEFT COLUMN -->
         <div>
           <div class="label">Movement</div>
           <select onchange="draft.movementId=this.value; draft.weight=suggestWeight(this.value); render()">
@@ -236,10 +216,30 @@ function render() {
             ? `<div class="hint">Last: ${formatUnit(last.weight)} × ${last.reps} • ${last.date || 'previous session'}</div>`
             : `<div class="hint">No history yet for this movement.</div>`
           ) : ''}
+          <!-- Reps stepper moved into the left column -->
+          <div class="stepper mt8">
+            <button class="button" onclick="nudgeReps(-repStepValue())">- 5</button>
+            <button class="button" onclick="nudgeReps(repStepValue())">+ 5</button>
+          </div>
         </div>
-        <div class="row" style="gap:10px; align-items:flex-end;">
-          <div style="flex:1"><div class="label">Weight (${state.unit})</div><input class="input big-number" type="number" inputmode="decimal" placeholder="e.g. 135" value="${draft.weight}" oninput="draft.weight=this.value"><div class="stepper mt8"><button class="button" onclick="nudgeWeight(-weightStepValue())">- ${weightStepValue()}</button><button class="button" onclick="nudgeWeight(weightStepValue())">+ ${weightStepValue()}</button></div></div><div style="flex:1"><div class="label">Reps</div><input class="input big-number" type="number" inputmode="numeric" placeholder="e.g. 5" value="${draft.reps}" oninput="draft.reps=this.value"></div>
-          <button class="button good" style="width:140px" onclick="addSetToDraft()">Save set</button>
+
+        <!-- RIGHT COLUMN (stacked: weight, reps, then Save) -->
+        <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
+          <div>
+            <div class="label">Weight (${state.unit})</div>
+            <input class="input big-number" type="number" inputmode="decimal" placeholder="e.g. 135"
+                   value="${draft.weight}" oninput="draft.weight=this.value">
+            <div class="stepper mt8">
+              <button class="button" onclick="nudgeWeight(-weightStepValue())">- ${weightStepValue()}</button>
+              <button class="button" onclick="nudgeWeight(weightStepValue())">+ ${weightStepValue()}</button>
+            </div>
+          </div>
+          <div>
+            <div class="label">Reps</div>
+            <input class="input big-number" type="number" inputmode="numeric" placeholder="e.g. 5"
+                   value="${draft.reps}" oninput="draft.reps=this.value">
+          </div>
+          <button class="button good" style="width:100%;" onclick="addSetToDraft()">Save set</button>
         </div>
       </div>
 
@@ -260,11 +260,6 @@ function render() {
             </tbody>
           </table>
         ` : `<div class="empty">No sets added yet.</div>`}
-      </div>
-
-      <div class="row mt16">
-        <button class="button primary" onclick="saveWorkout()">Save workout</button>
-        <button class="button ghost" onclick="draft=initDraft(); render()">Reset</button>
       </div>
     `;
     root.appendChild(panel);
@@ -356,13 +351,21 @@ function render() {
   }
 
   const footer = document.createElement('footer');
-  footer.innerHTML = `Tip: On iPhone, tap the <span class="kbd">Share</span> button in Safari → <b>Add to Home Screen</b> to install.`;
+  footer.innerHTML = `Tip: On iPhone, tap the <span class="kbd">Share</span> button in Safari → <b>Add to Home Screen</b>. <span class="badge2">Pocket Lifts ${APP_VERSION}</span>`;
   root.appendChild(footer);
 }
 
 window.addEventListener('load', () => {
   render();
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+    navigator.serviceWorker.register('./service-worker.js').then(reg => {
+      // Try to update and activate immediately
+      if (reg.waiting) { reg.waiting.postMessage({type:'SKIP_WAITING'}); }
+      if (reg.installing) {
+        reg.installing.addEventListener('statechange', () => {
+          if (reg.waiting) { reg.waiting.postMessage({type:'SKIP_WAITING'}); }
+        });
+      }
+    }).catch(()=>{});
   }
 });
