@@ -19,13 +19,13 @@ a { color: var(--accent); text-decoration: none; }
     padding-right: calc(14px + env(safe-area-inset-right));
   }
 }
-.container { /* iOS fallback */
+/* Fallback for older iOS */
+.container {
   padding-top: calc(14px + constant(safe-area-inset-top));
   padding-bottom: calc(14px + constant(safe-area-inset-bottom));
   padding-left: calc(14px + constant(safe-area-inset-left));
   padding-right: calc(14px + constant(safe-area-inset-right));
 }
-
 .header { display:flex; align-items:center; justify-content: space-between; gap: 12px; }
 .title { font-size: 22px; font-weight: 700; letter-spacing: 0.2px; }
 .badge { background: #1f2430; color: var(--muted); padding: 4px 10px; border-radius: 999px; font-size: 12px; }
@@ -51,6 +51,7 @@ a { color: var(--accent); text-decoration: none; }
 h2 { font-size: 18px; margin: 8px 0; }
 h3 { font-size: 15px; margin: 8px 0; color: var(--muted); }
 .list { display: grid; gap: 10px; }
+.divider { height: 1px; background: #232a37; margin: 8px 0; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid #22283a; }
 .small { font-size: 12px; }
@@ -72,25 +73,34 @@ hr { border: none; border-top:1px solid #232a37; margin: 12px 0; }
 .right { text-align: right; }
 .center { text-align:center; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
-
-/* Big inputs + steppers */
-.input.big-number { font-size: 28px; font-weight: 800; text-align: center; padding: 16px 14px; letter-spacing: 0.3px; }
-.input:focus, select:focus { outline: 2px solid rgba(59,130,246,0.8); box-shadow: 0 0 0 3px rgba(59,130,246,0.25); border-color: #385ea8; }
-input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-input[type=number] { -moz-appearance: textfield; }
+/* Easier-to-read weight input */
+.input.big-number {
+  font-size: 28px;
+  font-weight: 800;
+  text-align: center;
+  padding: 16px 14px;
+  letter-spacing: 0.3px;
+}
+/* Improve input focus visibility */
+.input:focus, select:focus {
+  outline: 2px solid rgba(59,130,246,0.8);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+  border-color: #385ea8;
+}
+/* Remove spinners for number inputs on iOS/Chrome */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
 .stepper { display:flex; gap:8px; }
 .stepper .button { padding: 10px 12px; }
 
-/* WhatsApp import */
 .importBox { background:#0f141d; border:1px dashed #2a3140; padding:12px; border-radius:12px; }
 .importList { display:grid; gap:8px; margin-top:10px; max-height: 280px; overflow:auto; }
 .importItem { display:flex; align-items:center; gap:10px; background:#0e121a; border:1px solid #22283a; padding:8px; border-radius:10px; }
 .importItem input[type="text"] { flex:1; }
 .note { font-size:12px; color: var(--muted); }
-
-/* Wave panel */
-.waveBox { background:#0f141d; border:1px solid #232a37; padding:12px; border-radius:12px; margin-top:12px; }
-.waveBox .grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
-@media (max-width: 520px) {
-  .waveBox .grid { grid-template-columns: 1fr; }
-}
