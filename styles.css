@@ -7,21 +7,20 @@
   --accent-2: #22c55e;
   --danger: #ef4444;
 }
-
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; height:100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
 a { color: var(--accent); text-decoration: none; }
 .container { max-width: 920px; margin: 0 auto; padding: 14px; }
 @supports (padding: max(0px)) {
-  .container { 
+  .container {
     padding-top: calc(14px + env(safe-area-inset-top));
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
     padding-left: calc(14px + env(safe-area-inset-left));
     padding-right: calc(14px + env(safe-area-inset-right));
   }
 }
-/* Fallback for older iOS that used constant() */
-.container { 
+/* Fallback for older iOS */
+.container {
   padding-top: calc(14px + constant(safe-area-inset-top));
   padding-bottom: calc(14px + constant(safe-area-inset-bottom));
   padding-left: calc(14px + constant(safe-area-inset-left));
@@ -46,7 +45,7 @@ a { color: var(--accent); text-decoration: none; }
 .button.good { background: var(--accent-2); color: white; }
 .button.ghost { background: transparent; border: 1px dashed #2a3140; color: var(--muted); }
 .button.danger { background: var(--danger); color: white; }
-.kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; background:#0f1420; padding: 2px 6px; border-radius: 6px; border:1px solid #22283a; color: #aab4c6; font-size: 12px;}
+.kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; background:#0f1420; padding: 2px 6px; border-radius: 6px; border:1px solid #22283a; color: #aab4c6; font-size: 12px;}
 .card { background: #10141c; border: 1px solid #22283a; padding: 12px; border-radius: 14px; }
 .subtle { color: var(--muted); }
 h2 { font-size: 18px; margin: 8px 0; }
@@ -73,3 +72,4 @@ hr { border: none; border-top:1px solid #232a37; margin: 12px 0; }
 .bold { font-weight: 700; }
 .right { text-align: right; }
 .center { text-align:center; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; }

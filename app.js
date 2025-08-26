@@ -1,15 +1,8 @@
-/* Pocket Lifts — simple offline workout tracker
- * Data model in localStorage under key 'pocket_lifts_v1'
- * {
- *   unit: 'lb' | 'kg',
- *   movements: [{id, name, bodypart?}],
- *   workouts: [{
- *      id, date: 'YYYY-MM-DD',
- *      notes, sets: [{id, movementId, movementName, weight, reps}]
- *   }]
- * }
+/* Pocket Lifts — simple offline workout tracker (v3)
+ * Changes:
+ * - "Save set" immediately updates list and auto-scrolls
+ * - Compact "Last" line under movement selector
  */
-
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -29,7 +22,7 @@ const defaultState = {
 };
 
 let state = load();
-let currentTab = 'workout'; // 'workout' | 'movements' | 'history'
+let currentTab = 'workout';
 let draft = initDraft();
 
 function save() {
@@ -42,7 +35,6 @@ function load() {
     const raw = localStorage.getItem(storeKey);
     if (!raw) return structuredClone(defaultState);
     const obj = JSON.parse(raw);
-    // migrate if needed
     obj.movements ??= [];
     obj.workouts ??= [];
     obj.unit ??= 'lb';
@@ -60,13 +52,12 @@ function initDraft() {
     movementId: state.movements[0]?.id || null,
     weight: suggestWeight(state.movements[0]?.id),
     reps: 5,
-    sets: [] // {id, movementId, movementName, weight, reps}
+    sets: []
   };
 }
 
 function suggestWeight(movementId) {
   if (!movementId) return '';
-  // Find last used weight for this movement
   const workouts = [...state.workouts].sort((a,b)=> b.date.localeCompare(a.date));
   for (const w of workouts) {
     const found = [...w.sets].reverse().find(s => s.movementId === movementId);
@@ -90,7 +81,6 @@ function deleteMovement(id) {
   if (!confirm('Delete this movement? (This does not delete past workouts)')) return;
   state.movements = state.movements.filter(m => m.id !== id);
   save();
-  // Fix draft selection if needed
   if (draft.movementId === id) {
     draft.movementId = state.movements[0]?.id || null;
     draft.weight = suggestWeight(draft.movementId);
@@ -98,53 +88,40 @@ function deleteMovement(id) {
 }
 
 function addSetToDraft() {
-  if (!draft.movementId) {
-    alert('Add a movement first.');
-    return;
-  }
+  if (!draft.movementId) { alert('Add a movement first.'); return; }
   const mv = state.movements.find(m => m.id === draft.movementId);
   const weight = Number(draft.weight);
   const reps = Number(draft.reps);
-  if (!mv || isNaN(weight) || isNaN(reps) || reps <= 0) {
-    alert('Please enter a valid weight and reps.');
-    return;
-  }
-  draft.sets.push({
-    id: uid(),
-    movementId: mv.id,
-    movementName: mv.name,
-    weight, reps
-  });
-  // Next-set suggestions
-  draft.weight = weight; // stay same by default
+  if (!mv || isNaN(weight) || isNaN(reps) || reps <= 0) { alert('Please enter a valid weight and reps.'); return; }
+
+  draft.sets.push({ id: uid(), movementId: mv.id, movementName: mv.name, weight, reps });
+  // Keep same weight by default
+  draft.weight = weight;
+
+  // Re-render immediately so the new set shows
+  render();
+  // Scroll to the last row for feedback
+  setTimeout(() => {
+    const rows = document.querySelectorAll('tbody tr');
+    if (rows.length) rows[rows.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 0);
 }
 
 function saveWorkout() {
-  if (!draft.sets.length) {
-    alert('Add at least one set.');
-    return;
-  }
-  state.workouts.push({
-    id: uid(),
-    date: draft.date,
-    notes: draft.notes.trim(),
-    sets: structuredClone(draft.sets)
-  });
+  if (!draft.sets.length) { alert('Add at least one set.'); return; }
+  state.workouts.push({ id: uid(), date: draft.date, notes: draft.notes.trim(), sets: structuredClone(draft.sets) });
   save();
   draft = initDraft();
   alert('Workout saved!');
 }
 
-function e1RM(weight, reps) {
-  // Epley: 1RM = w * (1 + reps/30)
-  return Math.round(weight * (1 + reps/30));
-}
+function e1RM(weight, reps) { return Math.round(weight * (1 + reps/30)); }
 
 function lastUsed(movementId) {
   const workouts = [...state.workouts].sort((a,b)=> b.date.localeCompare(a.date));
   for (const w of workouts) {
     const set = [...w.sets].reverse().find(s => s.movementId === movementId);
-    if (set) return set;
+    if (set) return { ...set, date: w.date };
   }
   return null;
 }
@@ -154,44 +131,27 @@ function formatUnit(n) {
   return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ' + state.unit;
 }
 
-function switchTab(tab) {
-  currentTab = tab;
-  render();
-}
+function switchTab(tab) { currentTab = tab; render(); }
 
-function deleteWorkout(id) {
-  if (!confirm('Delete this workout?')) return;
-  state.workouts = state.workouts.filter(w => w.id !== id);
-  save();
-}
+function deleteWorkout(id) { if (!confirm('Delete this workout?')) return; state.workouts = state.workouts.filter(w => w.id !== id); save(); }
 
 function exportCSV() {
   const rows = [['date','movement','weight','reps','unit','notes']];
   for (const w of state.workouts) {
-    for (const s of w.sets) {
-      rows.push([w.date, s.movementName, s.weight, s.reps, state.unit, w.notes.replace(/\n/g,' ')]);
-    }
+    for (const s of w.sets) rows.push([w.date, s.movementName, s.weight, s.reps, state.unit, w.notes.replace(/\\n/g,' ')]);
   }
-  const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(x => `\"${String(x).replace(/\"/g,'\"\"')}\"`).join(',')).join('\\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = 'pocket-lifts.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+  a.href = url; a.download = 'pocket-lifts.csv'; a.click(); URL.revokeObjectURL(url);
 }
 
-function changeUnit(u) {
-  state.unit = u;
-  save();
-}
+function changeUnit(u) { state.unit = u; save(); }
 
 function render() {
-  const root = $('#app');
-  root.innerHTML = '';
+  const root = $('#app'); root.innerHTML = '';
 
-  // Header
   const header = document.createElement('div');
   header.className = 'header';
   header.innerHTML = `
@@ -207,7 +167,6 @@ function render() {
   `;
   root.appendChild(header);
 
-  // Settings row
   const settings = document.createElement('div');
   settings.className = 'mt12';
   settings.innerHTML = `
@@ -215,7 +174,7 @@ function render() {
       <div class="row space-between">
         <div class="row wrap" style="gap:8px;">
           <span class="tag"><span class="dot"></span> Data saved on this device</span>
-          <span class="tag"><span class="dot" style="background:#22c55e"></span> No sign‑in required</span>
+          <span class="tag"><span class="dot" style="background:#22c55e"></span> No sign-in required</span>
         </div>
         <div class="row">
           <span class="mr8 subtle small">Unit</span>
@@ -232,6 +191,7 @@ function render() {
   if (currentTab === 'workout') {
     const panel = document.createElement('div');
     panel.className = 'panel mt12';
+    const last = draft.movementId ? lastUsed(draft.movementId) : null;
     panel.innerHTML = `
       <h2>New Workout</h2>
       <div class="grid two mt8">
@@ -248,17 +208,13 @@ function render() {
       <div class="grid two">
         <div>
           <div class="label">Movement</div>
-          <select onchange="draft.movementId=this.value; draft.weight=suggestWeight(this.value)">
+          <select onchange="draft.movementId=this.value; draft.weight=suggestWeight(this.value); render()">
             ${state.movements.map(m => `<option value="${m.id}" ${draft.movementId===m.id?'selected':''}>${m.name}</option>`).join('')}
           </select>
-          ${draft.movementId ? (() => {
-              const last = lastUsed(draft.movementId);
-              if (last) {
-                return `<div class="small subtle mt8">Last used: <span class="badge2">${formatUnit(last.weight)} × ${last.reps} on ${last.date || 'a past workout'}</span></div>`;
-              } else {
-                return `<div class="small subtle mt8">No history yet for this movement.</div>`;
-              }
-            })() : ''}
+          ${draft.movementId ? (last
+            ? `<div class="hint">Last: ${formatUnit(last.weight)} × ${last.reps} • ${last.date || 'previous session'}</div>`
+            : `<div class="hint">No history yet for this movement.</div>`
+          ) : ''}
         </div>
         <div class="row" style="gap:10px; align-items:flex-end;">
           <div style="flex:1">
@@ -269,7 +225,7 @@ function render() {
             <div class="label">Reps</div>
             <input class="input" type="number" inputmode="numeric" placeholder="e.g. 5" value="${draft.reps}" oninput="draft.reps=this.value">
           </div>
-          <button class="button good" style="width:140px" onclick="addSetToDraft()">Add set</button>
+          <button class="button good" style="width:140px" onclick="addSetToDraft()">Save set</button>
         </div>
       </div>
 
@@ -373,13 +329,11 @@ function render() {
     `;
     root.appendChild(panel);
 
-    // Hook up filter after insertion
     const filter = $('#filterMv');
     filter.addEventListener('change', () => {
       const mv = filter.value;
-      if (!mv) {
-        $$('tbody tr', panel).forEach(tr => tr.style.display = '');
-      } else {
+      if (!mv) { $$('tbody tr', panel).forEach(tr => tr.style.display = ''); }
+      else {
         $$('tbody tr', panel).forEach(tr => {
           tr.style.display = (tr.getAttribute('data-movement-id') === mv) ? '' : 'none';
         });
@@ -387,7 +341,6 @@ function render() {
     });
   }
 
-  // Footer
   const footer = document.createElement('footer');
   footer.innerHTML = `Tip: On iPhone, tap the <span class="kbd">Share</span> button in Safari → <b>Add to Home Screen</b> to install.`;
   root.appendChild(footer);
