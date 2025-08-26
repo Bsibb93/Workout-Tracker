@@ -1,7 +1,7 @@
 {
   "name": "Pocket Lifts",
   "short_name": "Pocket Lifts",
-  "description": "Track your workouts, sets, reps, and weight. Quick history and last-used suggestions.",
+  "description": "Track your workouts with sets, reps, weights, waves, and intensity tags.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#14161a",
